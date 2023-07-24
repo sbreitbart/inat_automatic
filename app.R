@@ -38,7 +38,8 @@ inat_auto %<>%
 pal <- colorFactor(palette = 'magma',
                    domain = inat_auto$year)
 
-
+pal_needsID <- colorFactor(palette = 'plasma',
+                   domain = inat_auto$year)
 
 # ui-----
 
@@ -63,100 +64,28 @@ ui <- fluidPage(
                                                               `selected-text-format` = "count > 2"),
                                                multiple = TRUE),
                                leafletOutput("all_map"),
-                               DT::dataTableOutput('inat_table')))
+                               DT::dataTableOutput('inat_table'))),
+            
+            tabPanel("Sightings that need additional ID",
+                     fluidPage(shinyWidgets::pickerInput(inputId = "iconic_taxon_name",
+                                                         label = h3("Select taxonomic group"),
+                                                         choices = as.list(
+                                                           sort(na.exclude(unique(inat_auto$iconic_taxon_name)))),
+                                                         selected = "Fungi",
+                                                         options = list(`actions-box` = TRUE,
+                                                                        `selected-text-format` = "count > 2"),
+                                                         multiple = TRUE),
+                               leafletOutput("all_map_needsID"),
+                               DT::dataTableOutput('inat_table_needsID')))
                         
          )
     ))
 
 
 # server-----
-# server <- function(input, output, session) {
-#   # Reactive expression for filtered data
-#   inat_map <- eventReactive(input$iconic_taxon_name, {
-#     inat_auto %>%
-#       filter(iconic_taxon_name %in% input$iconic_taxon_name)
-#   })
-#   
-#   output$inat_table <- DT::renderDataTable({
-#     inat_map() %>%
-#       dplyr::select(c("common_name", "scientific_name",
-#                       "place_guess", "year",
-#                       "iconic_taxon_name")) %>%
-#       dplyr::rename("Common Name" = 1,
-#                     "Scientific Name" = 2,
-#                     "Location" = 3,
-#                     "Year" = 4,
-#                     "Taxonomic Group" = 5)
-#   }, selection = 'single')  # Restrict row selection to one at a time
-#   
-#   
-#   output$all_map <- renderLeaflet({
-#     leaflet() %>%
-#       addTiles(
-#         options = providerTileOptions(opacity = 0.55)
-#       ) %>%
-#       addCircleMarkers(data = inat_map(),
-#                        lng = ~longitude,
-#                        lat = ~latitude,
-#                        radius = 8,  # Initial default size, you can adjust this value
-#                        popup = paste0(
-#                          "Scientific name: ",
-#                          ifelse(
-#                            !is.na(inat_map()$url),
-#                            paste0('<a href="', inat_map()$url, '" target="_blank">', inat_map()$scientific_name, "</a>"),
-#                            inat_map()$scientific_name
-#                          ),
-#                          ".",
-#                          "<br>", # line break
-#                          "Common name: ",
-#                          inat_map()$common_name, 
-#                          ".",
-#                          "<br>", # line break
-#                          "Location: ",
-#                          inat_map()$place_guess,
-#                          ".",
-#                          "<br>",
-#                          "Year: ", inat_map()$year, ".",
-#                          "<br>", # Add a line break
-#                          # Add image links if image_url column exists
-#                          ifelse(
-#                            !is.na(inat_map()$image_url),
-#                            paste0(
-#                              "Image: ",
-#                              '<a href="', inat_map()$image_url, '" target="_blank">',
-#                              '<img src="', inat_map()$image_url, '" style="max-height:150px; max-width:150px">',
-#                              '</a>'
-#                            ),
-#                            ""
-#                          )
-#                        ),
-#                        fill = T,
-#                        fillOpacity = 0.5,
-#                        color = ~pal(year)
-#       ) %>%
-#       addLegend("bottomleft",
-#                 pal = pal,
-#                 values = inat_auto$year,
-#                 opacity = 0.8)
-#   })
-#   
-#   # Observe selected row in the data table
-#   observeEvent(input$inat_table_rows_selected, {
-#     selected_row <- input$inat_table_rows_selected
-#     if (length(selected_row) > 0) {
-#       # Get the selected row data
-#       selected_data <- inat_map()[selected_row, c("latitude", "longitude")]
-#       
-#       # Check if latitude and longitude exist and zoom to the selected point
-#       if (!is.na(selected_data$latitude) && !is.na(selected_data$longitude)) {
-#         leafletProxy("all_map") %>%
-#           setView(lng = selected_data$longitude, lat = selected_data$latitude, zoom = 14)
-#       }
-#     }
-#   })
-# }
 
 server <- function(input, output, session) {
+  
   # Reactive expression for filtered data
   inat_map <- eventReactive(input$iconic_taxon_name, {
     inat_auto %>%
@@ -241,6 +170,91 @@ server <- function(input, output, session) {
               lat = mean(inat_map()$latitude),
               zoom = 2)
   })
+  
+  # Second Map: Sightings that need ID
+  inat_map_needsID <- eventReactive(input$iconic_taxon_name, {
+    inat_auto %>%
+      dplyr::filter(quality_grade == "needs_id") %>%
+      filter(iconic_taxon_name %in% input$iconic_taxon_name)
+  })
+  
+  output$inat_table_needsID <- DT::renderDataTable({
+    inat_map_needsID() %>%
+      dplyr::select(c("common_name", "scientific_name",
+                      "place_guess", "year",
+                      "iconic_taxon_name")) %>%
+      dplyr::rename("Common Name" = 1,
+                    "Scientific Name" = 2,
+                    "Location" = 3,
+                    "Year" = 4,
+                    "Taxonomic Group" = 5)
+  }, selection = 'single')  # Restrict row selection to one at a time
+  
+  output$all_map_needsID <- renderLeaflet({
+    leaflet() %>%
+      addTiles(
+        options = providerTileOptions(opacity = 0.55)
+      ) %>%
+      addCircleMarkers(data = inat_map_needsID(),
+                       lng = ~longitude,
+                       lat = ~latitude,
+                       radius = 8,  # Initial default size, you can adjust this value
+                       popup = paste0(
+                         "Scientific name: ",
+                         ifelse(
+                           !is.na(inat_map()$url),
+                           paste0('<a href="', inat_map()$url, '" target="_blank">', inat_map()$scientific_name, "</a>"),
+                           inat_map()$scientific_name
+                         ),
+                         ".",
+                         "<br>", # line break
+                         "Common name: ",
+                         inat_map()$common_name,
+                         ".",
+                         "<br>", # line break
+                         "Location: ",
+                         inat_map()$place_guess,
+                         ".",
+                         "<br>",
+                         "Year: ", inat_map()$year, ".",
+                         "<br>", # Add a line break
+                         # Add image links if image_url column exists
+                         ifelse(
+                           !is.na(inat_map()$image_url),
+                           paste0(
+                             "Image: ",
+                             '<a href="', inat_map()$image_url, '" target="_blank">',
+                             '<img src="', inat_map()$image_url, '" style="max-height:150px; max-width:150px">',
+                             '</a>'
+                           ),
+                           ""
+                         )
+                       ),
+                       fill = T,
+                       fillOpacity = 0.5,
+                       color = ~pal(year)
+      ) %>%
+      addLegend("bottomleft",
+                pal = pal_needsID,
+                values = inat_auto$year,
+                opacity = 0.8) %>%
+      # Add triangle markers on top of the selected point
+      addMarkers(data = inat_map(),
+                 lng = ~longitude[selected_point_index()],
+                 lat = ~latitude[selected_point_index()],
+                 icon = makeIcon(iconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png",
+                                 iconWidth = 16, iconHeight = 26, iconAnchorX = 8, iconAnchorY = 26),
+                 # Zoom in to the selected point
+                 labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE),
+                 popupOptions = popupOptions(closeOnClick = FALSE)
+      ) %>%
+      # Set initial view to show all points
+      setView(lng = mean(inat_map()$longitude), 
+              lat = mean(inat_map()$latitude),
+              zoom = 2)
+  })
+  
+  
   
   # Observe selected row in the data table and update the selected_point_index
   observeEvent(input$inat_table_rows_selected, {
